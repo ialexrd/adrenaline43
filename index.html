@@ -945,14 +945,37 @@
 </head>
 <body>
 
-<div class="shell">
+<div class="modal-overlay open" id="loginScreen">
+  <div class="modal">
+    <div class="modal-head">
+      <h2>Вход</h2>
+    </div>
+    <form id="loginForm">
+      <div class="field">
+        <label for="loginEmail">Email</label>
+        <input type="email" id="loginEmail" required autocomplete="username">
+      </div>
+      <div class="field">
+        <label for="loginPassword">Пароль</label>
+        <input type="password" id="loginPassword" required autocomplete="current-password">
+      </div>
+      <p id="loginError" style="display:none;color:var(--coral);font-size:13px;margin:0 0 14px;"></p>
+      <button type="submit" class="btn-submit">Войти</button>
+    </form>
+  </div>
+</div>
+
+<div class="shell" id="shell" style="display:none;">
 
   <header class="top">
     <div>
       <p class="brand-eyebrow">Журнал операций</p>
       <h1>Учет проката мототехники</h1>
     </div>
-    <button type="button" class="btn-new btn-new-desktop open-modal-trigger">+ Новая запись</button>
+    <div style="display:flex;gap:10px;align-items:center;">
+      <button type="button" class="btn-new btn-new-desktop open-modal-trigger">+ Новая запись</button>
+      <button type="button" id="logoutBtn" class="ghost-btn">Выйти</button>
+    </div>
   </header>
 
   <section class="period-bar">
@@ -1215,8 +1238,62 @@
   </div>
 </div>
 
-<script>
+<script type="module">
+import { initializeApp } from 'https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js';
+import {
+  getAuth, onAuthStateChanged, signInWithEmailAndPassword, signOut
+} from 'https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js';
+import {
+  getFirestore, collection, doc, getDoc, setDoc, addDoc, deleteDoc,
+  writeBatch, onSnapshot, getDocs
+} from 'https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js';
+
+const firebaseConfig = {
+  apiKey: "AIzaSyDUt6MAWdEUJtSKaYSQUQRmKdEl6o4wZIQ",
+  authDomain: "adrenaline43.firebaseapp.com",
+  projectId: "adrenaline43",
+  storageBucket: "adrenaline43.firebasestorage.app",
+  messagingSenderId: "694839019905",
+  appId: "1:694839019905:web:2d99e7e080808ca3c98080",
+  measurementId: "G-BPCB8G3G4X"
+};
+const firebaseApp = initializeApp(firebaseConfig);
+const auth = getAuth(firebaseApp);
+const db = getFirestore(firebaseApp);
+
 (function(){
+  const loginScreen = document.getElementById('loginScreen');
+  const shellEl = document.getElementById('shell');
+  const loginForm = document.getElementById('loginForm');
+  const loginEmail = document.getElementById('loginEmail');
+  const loginPassword = document.getElementById('loginPassword');
+  const loginError = document.getElementById('loginError');
+  const logoutBtn = document.getElementById('logoutBtn');
+
+  loginForm.addEventListener('submit', (e)=>{
+    e.preventDefault();
+    loginError.style.display = 'none';
+    signInWithEmailAndPassword(auth, loginEmail.value.trim(), loginPassword.value)
+      .catch(()=>{
+        loginError.textContent = 'Неверный email или пароль';
+        loginError.style.display = 'block';
+      });
+  });
+  logoutBtn.addEventListener('click', ()=> signOut(auth));
+
+  onAuthStateChanged(auth, (user)=>{
+    if(user){
+      loginScreen.classList.remove('open');
+      shellEl.style.display = '';
+      loginForm.reset();
+      startFirestoreSync(); // defined below in this same IIFE (Task 2) — hoisted, safe to call here
+    } else {
+      loginScreen.classList.add('open');
+      shellEl.style.display = 'none';
+      stopFirestoreSync(); // defined below in this same IIFE (Task 2) — hoisted, safe to call here
+    }
+  });
+
   const STORAGE_KEY = 'prokat_uchet_v1';
   const NEW_OPTION = '__new__';
   const MANUAL_OPTION = '__manual__';
