@@ -1294,7 +1294,6 @@ const db = getFirestore(firebaseApp);
     }
   });
 
-  const STORAGE_KEY = 'prokat_uchet_v1';
   const NEW_OPTION = '__new__';
   const MANUAL_OPTION = '__manual__';
   const CORE_FLEET_TYPES = ['Эндуро','Питбайк','Квадроцикл','Снегоход'];
@@ -1308,65 +1307,64 @@ const db = getFirestore(firebaseApp);
   function monthKey(dateStr){ return dateStr.slice(0,7); }
   function currentMonthKey(){ return todayISO().slice(0,7); }
 
-  function seedData(){
-    return {
-      equipmentTypes: ['Эндуро','Питбайк','Квадроцикл','Снегоход'],
-      otherIncomeCategories: ['Поломки'],
-      expenseCategories: ['ГСМ','Реклама','Аренда','ЗП работника','Запчасти','Расходники'],
-      paymentMethods: ['Нал','Безнал','Сертификат'],
-      sources: ['ВКонтакте','Инст','Авито','Яндекс','Рекомендация'],
-      transactions: [
-        {id:1, date:'2026-08-05', type:'income', status:'completed', category:'Питбайк', qty:1, amount:10000, payment:'Нал', source:'Яндекс', client:'Григорий', prepayment:3000},
-        {id:2, date:'2026-08-05', type:'expense', status:'completed', category:'ГСМ', qty:1, amount:2500, payment:'', source:''},
-        {id:3, date:'2026-08-06', type:'income', status:'completed', category:'Эндуро', qty:2, amount:24000, payment:'Безнал', source:'ВК', client:'', prepayment:0},
-        {id:4, date:'2026-08-06', type:'expense', status:'completed', category:'Реклама', qty:1, amount:15000, payment:'', source:''},
-        {id:5, date:'2026-08-07', type:'income', status:'completed', category:'Квадроцикл', qty:1, amount:18000, payment:'Сертификат', source:'Инст', client:'', prepayment:0},
-        {id:6, date:'2026-08-07', type:'expense', status:'completed', category:'Запчасти', qty:1, amount:3000, payment:'', source:''},
-        {id:7, date:'2026-08-09', type:'income', status:'completed', category:'Предоплата', qty:0, amount:5000, payment:'', source:'', client:'Александр, +7 900 123-45-67', prepayment:5000}
-      ],
-      sourceRecords: [
-        {id:1, date:'2026-08-05', source:'ВКонтакте', qty:3},
-        {id:2, date:'2026-08-06', source:'Инст', qty:2},
-        {id:3, date:'2026-08-07', source:'Яндекс', qty:1},
-        {id:4, date:'2026-08-08', source:'Рекомендация', qty:1}
-      ]
-    };
+  const settingsRef = doc(db, 'settings', 'config');
+  const transactionsCol = collection(db, 'transactions');
+  const sourceRecordsCol = collection(db, 'sourceRecords');
+  let syncStarted = false;
+  let unsubscribers = [];
+
+  let state = {
+    equipmentTypes: [], otherIncomeCategories: [], expenseCategories: [],
+    paymentMethods: [], sources: [], transactions: [], sourceRecords: []
+  };
+
+  function saveSettings(){
+    setDoc(settingsRef, {
+      equipmentTypes: state.equipmentTypes,
+      otherIncomeCategories: state.otherIncomeCategories,
+      expenseCategories: state.expenseCategories,
+      paymentMethods: state.paymentMethods,
+      sources: state.sources
+    });
   }
 
-  function load(){
-    try{
-      const raw = localStorage.getItem(STORAGE_KEY);
-      if(!raw) return seedData();
-      const parsed = JSON.parse(raw);
-      if(!parsed.transactions) return seedData();
-      if(!parsed.sources) parsed.sources = ['ВКонтакте','Инст','Авито','Яндекс','Рекомендация'];
-      if(!parsed.sourceRecords) parsed.sourceRecords = [];
-      if(!parsed.otherIncomeCategories) parsed.otherIncomeCategories = ['Поломки'];
-      if(parsed.equipmentTypes.includes('Поломки')){
-        parsed.equipmentTypes = parsed.equipmentTypes.filter(c=> c !== 'Поломки');
-        if(!parsed.otherIncomeCategories.includes('Поломки')) parsed.otherIncomeCategories.push('Поломки');
-      }
-      if(parsed.expenseCategories.includes('Зарплата')){
-        parsed.expenseCategories = parsed.expenseCategories.map(c=> c === 'Зарплата' ? 'ЗП работника' : c);
-      }
-      if(!parsed.expenseCategories.includes('ЗП работника')) parsed.expenseCategories.push('ЗП работника');
-      parsed.transactions.forEach(t=>{
-        if(t.category === 'Зарплата') t.category = 'ЗП работника';
-        if(t.status === 'prepaid'){
-          t.status = 'completed';
-          t.category = 'Предоплата';
-        }
+  async function startFirestoreSync(){
+    if(syncStarted) return;
+    syncStarted = true;
+    const settingsSnap = await getDoc(settingsRef);
+    if(!settingsSnap.exists()){
+      await setDoc(settingsRef, {
+        equipmentTypes: ['Эндуро','Питбайк','Квадроцикл','Снегоход'],
+        otherIncomeCategories: ['Поломки'],
+        expenseCategories: ['ГСМ','Реклама','Аренда','ЗП работника','Запчасти','Расходники'],
+        paymentMethods: ['Нал','Безнал','Сертификат'],
+        sources: ['ВКонтакте','Инст','Авито','Яндекс','Рекомендация']
       });
-      return parsed;
-    }catch(e){
-      return seedData();
     }
-  }
-  function save(){
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+    unsubscribers.push(onSnapshot(settingsRef, (snap)=>{
+      const data = snap.data() || {};
+      state.equipmentTypes = data.equipmentTypes || [];
+      state.otherIncomeCategories = data.otherIncomeCategories || [];
+      state.expenseCategories = data.expenseCategories || [];
+      state.paymentMethods = data.paymentMethods || [];
+      state.sources = data.sources || [];
+      render();
+    }));
+    unsubscribers.push(onSnapshot(transactionsCol, (snap)=>{
+      state.transactions = snap.docs.map(d=> ({ id: d.id, ...d.data() }));
+      render();
+    }));
+    unsubscribers.push(onSnapshot(sourceRecordsCol, (snap)=>{
+      state.sourceRecords = snap.docs.map(d=> ({ id: d.id, ...d.data() }));
+      render();
+    }));
   }
 
-  let state = load();
+  function stopFirestoreSync(){
+    unsubscribers.forEach(fn=> fn());
+    unsubscribers = [];
+    syncStarted = false;
+  }
 
   const fmtMoney = (n) => Math.round(n).toLocaleString('ru-RU') + ' ₽';
 
@@ -1642,12 +1640,12 @@ const db = getFirestore(firebaseApp);
       if(val && qty > 0) items.push({ source: val, qty: qty });
     }
     if(items.length === 0){ alert('Добавьте источник и количество'); return; }
-    items.forEach((it, idx)=>{
-      state.sourceRecords.push({ id: Date.now() + idx, date: sDate.value, source: it.source, qty: it.qty });
+    const batch = writeBatch(db);
+    items.forEach((it)=>{
+      batch.set(doc(sourceRecordsCol), { date: sDate.value, source: it.source, qty: it.qty, createdAt: Date.now() });
     });
-    save();
+    batch.commit();
     closeSourceModal();
-    render();
   });
 
   let incomeCategoryMode = 'technika';
@@ -1675,7 +1673,10 @@ const db = getFirestore(firebaseApp);
   function resolveValue(select, manualInput, list){
     if(select.value === MANUAL_OPTION){
       const val = (manualInput.value || '').trim();
-      if(val && !list.includes(val)) list.push(val);
+      if(val && !list.includes(val)){
+        list.push(val);
+        saveSettings();
+      }
       return val;
     }
     return select.value;
@@ -1783,17 +1784,17 @@ const db = getFirestore(firebaseApp);
         }
       }
       if(items.length === 0){ alert('Добавьте расход, категорию и сумму'); return; }
-      items.forEach((it, idx)=>{
-        state.transactions.push({
-          id: Date.now() + idx, date: fDate.value, type:'expense', status:'completed',
+      const batch = writeBatch(db);
+      items.forEach((it)=>{
+        batch.set(doc(transactionsCol), {
+          date: fDate.value, type:'expense', status:'completed',
           amount: it.amount, category: it.category, qty:1, payment:'', source:'',
-          client:'', prepayment:0, partner: it.partner
+          client:'', prepayment:0, partner: it.partner, createdAt: Date.now()
         });
       });
-      save();
+      batch.commit();
       resetEntryForm();
       closeModal();
-      render();
       return;
     }
 
@@ -1806,7 +1807,7 @@ const db = getFirestore(firebaseApp);
       if(!clientName){ alert('Укажите имя или номер клиента'); return; }
       if(!hasPrepayment){ alert('Укажите сумму предоплаты'); return; }
       record = {
-        id: Date.now(), date: fDate.value, type:'income', status:'completed',
+        createdAt: Date.now(), date: fDate.value, type:'income', status:'completed',
         client: clientName, prepayment: prepaymentVal, amount: prepaymentVal,
         category:'Предоплата', qty:0, payment:'', source:''
       };
@@ -1826,7 +1827,7 @@ const db = getFirestore(firebaseApp);
       const totalQty = items.reduce((a,b)=> a+b.qty, 0);
       const categoryVal = items.map(it=> it.category + ' ×' + it.qty).join(', ');
       record = {
-        id: Date.now(), date: fDate.value, type:'income', status:'completed',
+        createdAt: Date.now(), date: fDate.value, type:'income', status:'completed',
         category: categoryVal, qty: totalQty,
         payment:'', source:'', client:'',
         prepayment: 0,
@@ -1841,7 +1842,7 @@ const db = getFirestore(firebaseApp);
       const categoryVal = (fOtherCategory.value || '').trim();
       if(!categoryVal){ alert('Укажите категорию'); return; }
       record = {
-        id: Date.now(), date: fDate.value, type:'income', status:'completed',
+        createdAt: Date.now(), date: fDate.value, type:'income', status:'completed',
         category: categoryVal, qty: 0,
         payment: paymentVal, source: '',
         client: '',
@@ -1849,11 +1850,9 @@ const db = getFirestore(firebaseApp);
         amount: amountVal
       };
     }
-    state.transactions.push(record);
-    save();
+    addDoc(transactionsCol, record);
     resetEntryForm();
     closeModal();
-    render();
   });
 
   document.getElementById('exportBtn').addEventListener('click', ()=>{
@@ -1875,18 +1874,19 @@ const db = getFirestore(firebaseApp);
     URL.revokeObjectURL(url);
   });
 
-  document.getElementById('clearBtn').addEventListener('click', ()=>{
-    if(confirm('Удалить все записи безвозвратно?')){
-      state = {equipmentTypes: state.equipmentTypes, otherIncomeCategories: state.otherIncomeCategories, expenseCategories: state.expenseCategories, paymentMethods: state.paymentMethods, sources: state.sources, transactions: [], sourceRecords: []};
-      save();
-      render();
+  document.getElementById('clearBtn').addEventListener('click', async ()=>{
+    if(!confirm('Удалить все записи безвозвратно?')) return;
+    const [txSnap, srcSnap] = await Promise.all([getDocs(transactionsCol), getDocs(sourceRecordsCol)]);
+    const allDocs = [...txSnap.docs, ...srcSnap.docs];
+    for(let i = 0; i < allDocs.length; i += 450){
+      const batch = writeBatch(db);
+      allDocs.slice(i, i + 450).forEach(d=> batch.delete(d.ref));
+      await batch.commit();
     }
   });
 
   function deleteRecord(id){
-    state.transactions = state.transactions.filter(t=> t.id !== id);
-    save();
-    render();
+    deleteDoc(doc(transactionsCol, id));
   }
 
   monthFilter.addEventListener('change', render);
@@ -2116,7 +2116,7 @@ const db = getFirestore(firebaseApp);
 
     // --- ledger table ---
     ledgerBody.innerHTML = '';
-    const sorted = filtered.slice().sort((a,b)=> b.date.localeCompare(a.date) || b.id-a.id);
+    const sorted = filtered.slice().sort((a,b)=> b.date.localeCompare(a.date) || (b.createdAt||0)-(a.createdAt||0));
     if(sorted.length === 0){
       ledgerBody.innerHTML = '<tr class="empty-row"><td colspan="4">Нет записей за выбранный период</td></tr>';
     } else {
@@ -2132,7 +2132,7 @@ const db = getFirestore(firebaseApp);
         ledgerBody.appendChild(tr);
       });
       ledgerBody.querySelectorAll('.del-btn').forEach(btn=>{
-        btn.addEventListener('click', ()=> deleteRecord(Number(btn.dataset.id)));
+        btn.addEventListener('click', ()=> deleteRecord(btn.dataset.id));
       });
     }
 
