@@ -2172,9 +2172,10 @@ const db = getFirestore(firebaseApp);
     ];
     const incomeTotalOverview = Object.values(incomeByCat).reduce((a,b)=>a+b,0);
     const expenseTotalOverview = Object.values(expenseByCat).reduce((a,b)=>a+b,0);
+    const overviewGrandTotal = incomeTotalOverview + expenseTotalOverview;
     const overviewPercents = [
-      ...incomeCatKeys.map(k=> incomeTotalOverview ? Math.round(incomeByCat[k]/incomeTotalOverview*100) : 0),
-      ...expenseCatKeys.map(k=> expenseTotalOverview ? Math.round(expenseByCat[k]/expenseTotalOverview*100) : 0)
+      ...incomeCatKeys.map(k=> overviewGrandTotal ? Math.round(incomeByCat[k]/overviewGrandTotal*100) : 0),
+      ...expenseCatKeys.map(k=> overviewGrandTotal ? Math.round(expenseByCat[k]/overviewGrandTotal*100) : 0)
     ];
 
     if(chartOverview) chartOverview.destroy();
