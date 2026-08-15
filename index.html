@@ -1156,39 +1156,14 @@
 
       <div id="incomeFields">
         <div class="type-toggle income-cat-toggle">
-          <button type="button" data-icat="technika" class="active">Техника</button>
+          <button type="button" data-icat="cash" class="active">Наличные</button>
+          <button type="button" data-icat="noncash">Безнал</button>
           <button type="button" data-icat="other">Прочее</button>
-          <button type="button" data-icat="prepay">Предоплата</button>
-        </div>
-
-        <div id="technikaItemsWrap">
-          <div id="technikaItemsList"></div>
-          <button type="button" id="addTechnikaItemBtn" class="add-technika-btn">+ Добавить технику</button>
         </div>
 
         <div class="field" id="fOtherCategoryWrap" style="display:none;">
           <label for="fOtherCategory">Категория</label>
           <input type="text" id="fOtherCategory" placeholder="Например, поломки">
-        </div>
-
-        <div id="fPaymentGroup">
-          <div class="field">
-            <label for="fPayment">Способ оплаты</label>
-            <select id="fPayment"></select>
-          </div>
-          <div class="field" id="fPaymentManualWrap" style="display:none;">
-            <label for="fPaymentManual">Свой способ оплаты</label>
-            <input type="text" id="fPaymentManual" placeholder="Введите способ оплаты">
-          </div>
-        </div>
-
-        <div class="field" id="fClientWrap" style="display:none;">
-          <label for="fClient">Имя или номер клиента</label>
-          <input type="text" id="fClient" placeholder="Необязательно">
-        </div>
-        <div class="field" id="fPrepaymentWrap" style="display:none;">
-          <label for="fPrepayment">Сумма предоплаты, ₽</label>
-          <input type="number" id="fPrepayment" min="0" step="1">
         </div>
       </div>
 
@@ -1299,6 +1274,7 @@ const db = getFirestore(firebaseApp);
   const CORE_FLEET_TYPES = ['Эндуро','Питбайк','Квадроцикл','Снегоход'];
   const CORE_EXPENSE_CATEGORIES = ['ГСМ','Реклама','Аренда','ЗП работника','Запчасти'];
   const CORE_SOURCES = ['ВКонтакте','Инст','Авито','Яндекс','Рекомендация'];
+  const CORE_INCOME_CATEGORIES = ['Наличные','Безнал'];
 
   function todayISO(){
     const d = new Date();
@@ -1387,23 +1363,12 @@ const db = getFirestore(firebaseApp);
   const incomeCatBtns = document.querySelectorAll('.income-cat-toggle button');
   const fOtherCategoryWrap = document.getElementById('fOtherCategoryWrap');
   const fOtherCategory = document.getElementById('fOtherCategory');
-  const fClientWrap = document.getElementById('fClientWrap');
-  const fPrepaymentWrap = document.getElementById('fPrepaymentWrap');
   const incomeFields = document.getElementById('incomeFields');
   const expenseFields = document.getElementById('expenseFields');
   const entryForm = document.getElementById('entryForm');
   const fDate = document.getElementById('fDate');
-  const technikaItemsWrap = document.getElementById('technikaItemsWrap');
-  const technikaItemsList = document.getElementById('technikaItemsList');
-  const addTechnikaItemBtn = document.getElementById('addTechnikaItemBtn');
-  const fPaymentGroup = document.getElementById('fPaymentGroup');
-  const fPayment = document.getElementById('fPayment');
-  const fPaymentManualWrap = document.getElementById('fPaymentManualWrap');
-  const fPaymentManual = document.getElementById('fPaymentManual');
   const expenseItemsList = document.getElementById('expenseItemsList');
   const addExpenseItemBtn = document.getElementById('addExpenseItemBtn');
-  const fClient = document.getElementById('fClient');
-  const fPrepayment = document.getElementById('fPrepayment');
   const fAmountWrap = document.getElementById('fAmountWrap');
   const fAmount = document.getElementById('fAmount');
   const ledgerBody = document.getElementById('ledgerBody');
@@ -1443,70 +1408,6 @@ const db = getFirestore(firebaseApp);
     const last = mk + '-' + String(lastDay).padStart(2,'0');
     return [first,last];
   }
-
-  function resetManualFields(){
-    fPaymentManualWrap.style.display = 'none'; fPaymentManual.value = '';
-  }
-  function wireManualToggle(select, wrapEl, inputEl){
-    select.addEventListener('change', ()=>{
-      if(select.value === MANUAL_OPTION){
-        wrapEl.style.display = 'block';
-        inputEl.focus();
-      } else {
-        wrapEl.style.display = 'none';
-        inputEl.value = '';
-      }
-    });
-  }
-  wireManualToggle(fPayment, fPaymentManualWrap, fPaymentManual);
-
-  function createTechnikaItemRow(showLabels){
-    const row = document.createElement('div');
-    row.className = 'technika-item-row';
-    row.innerHTML =
-      '<div class="field">' +
-        (showLabels ? '<label>Техника</label>' : '') +
-        '<select class="ti-select"></select>' +
-        '<input type="text" class="ti-manual" placeholder="Введите название техники" style="display:none;margin-top:8px;">' +
-      '</div>' +
-      '<div class="field ti-qty-field">' +
-        (showLabels ? '<label>Кол-во</label>' : '') +
-        '<input type="number" class="ti-qty" min="1" step="1" value="1">' +
-      '</div>' +
-      '<button type="button" class="ti-remove" aria-label="Удалить">&times;</button>';
-    const select = row.querySelector('.ti-select');
-    populateSelect(select, state.equipmentTypes, MANUAL_OPTION, 'Заполнить вручную');
-    const manualInput = row.querySelector('.ti-manual');
-    select.addEventListener('change', ()=>{
-      if(select.value === MANUAL_OPTION){
-        manualInput.style.display = 'block';
-        manualInput.focus();
-      } else {
-        manualInput.style.display = 'none';
-        manualInput.value = '';
-      }
-    });
-    row.querySelector('.ti-remove').addEventListener('click', ()=>{
-      if(technikaItemsList.children.length > 1){
-        row.remove();
-      }
-    });
-    return row;
-  }
-  function resetTechnikaItems(){
-    technikaItemsList.innerHTML = '';
-    technikaItemsList.appendChild(createTechnikaItemRow(true));
-  }
-  function refreshTechnikaItemSelects(){
-    document.querySelectorAll('#technikaItemsList .ti-select').forEach(sel=>{
-      const current = sel.value;
-      populateSelect(sel, state.equipmentTypes, MANUAL_OPTION, 'Заполнить вручную');
-      if(Array.from(sel.options).some(o=>o.value===current)) sel.value = current;
-    });
-  }
-  addTechnikaItemBtn.addEventListener('click', ()=>{
-    technikaItemsList.appendChild(createTechnikaItemRow(false));
-  });
 
   function createExpenseItemRow(showLabel){
     const row = document.createElement('div');
@@ -1648,18 +1549,10 @@ const db = getFirestore(firebaseApp);
     closeSourceModal();
   });
 
-  let incomeCategoryMode = 'technika';
+  let incomeCategoryMode = 'cash';
   function updateIncomeCategoryMode(){
-    const isTechnika = incomeCategoryMode === 'technika';
     const isOther = incomeCategoryMode === 'other';
-    const isPrepay = incomeCategoryMode === 'prepay';
-
-    technikaItemsWrap.style.display = isTechnika ? 'block' : 'none';
     fOtherCategoryWrap.style.display = isOther ? 'block' : 'none';
-    fPaymentGroup.style.display = isOther ? 'block' : 'none';
-    fAmountWrap.style.display = isPrepay ? 'none' : 'block';
-    fClientWrap.style.display = isPrepay ? 'block' : 'none';
-    fPrepaymentWrap.style.display = isPrepay ? 'block' : 'none';
   }
   incomeCatBtns.forEach(btn=>{
     btn.addEventListener('click', ()=>{
@@ -1683,13 +1576,9 @@ const db = getFirestore(firebaseApp);
   }
 
   function openModal(){
-    resetManualFields();
-    fClient.value = '';
-    fPrepayment.value = '';
     fOtherCategory.value = '';
-    resetTechnikaItems();
     resetExpenseItems();
-    incomeCategoryMode = 'technika';
+    incomeCategoryMode = 'cash';
     incomeCatBtns.forEach(b=> b.classList.remove('active'));
     if(incomeCatBtns[0]) incomeCatBtns[0].classList.add('active');
     updateIncomeCategoryMode();
@@ -1729,7 +1618,7 @@ const db = getFirestore(firebaseApp);
       currentType = btn.dataset.type;
       incomeFields.style.display = currentType === 'income' ? 'block' : 'none';
       expenseFields.style.display = currentType === 'expense' ? 'block' : 'none';
-      fAmountWrap.style.display = currentType === 'expense' ? 'none' : (incomeCategoryMode === 'prepay' ? 'none' : 'block');
+      fAmountWrap.style.display = currentType === 'expense' ? 'none' : 'block';
     });
   });
 
@@ -1748,19 +1637,13 @@ const db = getFirestore(firebaseApp);
   }
 
   function refreshSelects(){
-    populateSelect(fPayment, state.paymentMethods, MANUAL_OPTION, 'Заполнить вручную');
-    refreshTechnikaItemSelects();
     refreshExpenseItemSelects();
     refreshSourceItemSelects();
-    resetManualFields();
   }
 
   function resetEntryForm(){
     fAmount.value = '';
-    fClient.value = '';
-    fPrepayment.value = '';
     fOtherCategory.value = '';
-    resetTechnikaItems();
     resetExpenseItems();
   }
 
@@ -1799,54 +1682,27 @@ const db = getFirestore(firebaseApp);
     }
 
     // income
+    const amountVal = parseFloat(fAmount.value);
+    if(isNaN(amountVal) || amountVal <= 0){ alert('Укажите сумму'); return; }
     let record;
-    if(incomeCategoryMode === 'prepay'){
-      const prepaymentVal = parseFloat(fPrepayment.value);
-      const hasPrepayment = !isNaN(prepaymentVal) && prepaymentVal > 0;
-      const clientName = (fClient.value || '').trim();
-      if(!clientName){ alert('Укажите имя или номер клиента'); return; }
-      if(!hasPrepayment){ alert('Укажите сумму предоплаты'); return; }
+    if(incomeCategoryMode === 'cash'){
       record = {
         createdAt: Date.now(), date: fDate.value, type:'income', status:'completed',
-        client: clientName, prepayment: prepaymentVal, amount: prepaymentVal,
-        category:'Предоплата', qty:0, payment:'', source:''
+        category:'Наличные', qty:0, payment:'', source:'', client:'', prepayment:0,
+        amount: amountVal
       };
-    } else if(incomeCategoryMode === 'technika'){
-      const amountVal = parseFloat(fAmount.value);
-      if(isNaN(amountVal) || amountVal <= 0){ alert('Укажите сумму'); return; }
-      const items = [];
-      Array.from(technikaItemsList.querySelectorAll('.technika-item-row')).forEach(row=>{
-        const select = row.querySelector('.ti-select');
-        const manualInput = row.querySelector('.ti-manual');
-        const qtyInput = row.querySelector('.ti-qty');
-        const val = resolveValue(select, manualInput, state.equipmentTypes);
-        const qty = parseInt(qtyInput.value,10) || 0;
-        if(val && qty > 0) items.push({category: val, qty: qty});
-      });
-      if(items.length === 0){ alert('Добавьте технику и количество'); return; }
-      const totalQty = items.reduce((a,b)=> a+b.qty, 0);
-      const categoryVal = items.map(it=> it.category + ' ×' + it.qty).join(', ');
+    } else if(incomeCategoryMode === 'noncash'){
       record = {
         createdAt: Date.now(), date: fDate.value, type:'income', status:'completed',
-        category: categoryVal, qty: totalQty,
-        payment:'', source:'', client:'',
-        prepayment: 0,
-        amount: amountVal,
-        items: items
+        category:'Безнал', qty:0, payment:'', source:'', client:'', prepayment:0,
+        amount: amountVal
       };
     } else {
-      const amountVal = parseFloat(fAmount.value);
-      if(isNaN(amountVal) || amountVal <= 0){ alert('Укажите сумму'); return; }
-      const paymentVal = resolveValue(fPayment, fPaymentManual, state.paymentMethods);
-      if(!paymentVal){ alert('Укажите способ оплаты'); return; }
       const categoryVal = (fOtherCategory.value || '').trim();
       if(!categoryVal){ alert('Укажите категорию'); return; }
       record = {
         createdAt: Date.now(), date: fDate.value, type:'income', status:'completed',
-        category: categoryVal, qty: 0,
-        payment: paymentVal, source: '',
-        client: '',
-        prepayment: 0,
+        category: categoryVal, qty:0, payment:'', source:'', client:'', prepayment:0,
         amount: amountVal
       };
     }
@@ -2141,10 +1997,10 @@ const db = getFirestore(firebaseApp);
     const otherIncomeDetails = {};
     incomeTx.forEach(t=>{
       if(!t.category) return;
-      const isTechnika = (t.items && t.items.length) || CORE_FLEET_TYPES.includes(t.category);
-      const label = isTechnika ? 'Техника' : 'Прочее';
+      const isCoreIncome = CORE_INCOME_CATEGORIES.includes(t.category);
+      const label = isCoreIncome ? t.category : 'Прочее';
       incomeByCat[label] = (incomeByCat[label]||0) + t.amount;
-      if(!isTechnika) otherIncomeDetails[t.category] = (otherIncomeDetails[t.category]||0) + t.amount;
+      if(!isCoreIncome) otherIncomeDetails[t.category] = (otherIncomeDetails[t.category]||0) + t.amount;
     });
     const expenseByCat = {};
     const otherExpenseDetails = {};
